@@ -1,0 +1,36 @@
+represents 代表 表示
+expose 暴露
+get access to 获得 接近 可以使用
+visible 看得见的;明显的，显然的;手头的，可得到的;可察觉到的
+instances 实例 例子
+exported 导出
+respective 各自的
+specific 特定的
+explicitly 显式
+indirectly 隐式
+demonstration 示范示例
+macros 宏
+identical to 与什么相同
+embedded 嵌入的
+bookmarks 书签
+components 组件
+integration 集成
+Container 容器
+Binaries 二进制文件
+tuning 调整
+subclassed 子类化
+additional 额外的
+turn 转变
+specify 指定
+Attach 添加
+overhead 开销
+introduce 引入
+procedure 程序，手续；步骤
+being present 在场 存在
+At this point 这时
+corrupted 崩溃的
+meta object 元对象
+equivalent 等同
+prevent 阻止
+resolve 解析
+symbol 符号

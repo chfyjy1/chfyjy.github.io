@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<!-- remoteobjects-index.qdoc -->
+  <title>Qt Remote Objects 5.9</title>
+  <link rel="stylesheet" type="text/css" href="style/offline-simple.css" />
+  <script type="text/javascript">
+    window.onload = function(){document.getElementsByTagName("link").item(0).setAttribute("href", "style/offline.css");};
+  </script>
+</head>
+<body>
+<div class="header" id="qtdocheader">
+  <div class="main">
+    <div class="main-rounded">
+      <div class="navigationbar">
+        <table><tr>
+<td ><a href="../qtdoc/supported-platforms-and-configurations.html#qt-5-9">Qt 5.9</a></td><td >Qt Remote Objects</td></tr></table><table class="buildversion"><tr>
+<td id="buildversion" width="100%" align="right">Qt 5.9.0 Reference Documentation</td>
+        </tr></table>
+      </div>
+    </div>
+<div class="content">
+<div class="line">
+<div class="content mainContent">
+<div class="sidebar">
+<div class="toc">
+<h3><a name="toc">Contents</a></h3>
+<ul>
+<li class="level1"><a href="#remote-object-concepts">Remote Object Concepts</a></li>
+<li class="level1"><a href="#uses">Uses</a></li>
+<li class="level1"><a href="#nodes">Nodes</a></li>
+<li class="level1"><a href="#connecting-nodes-using-qtro-urls">Connecting Nodes using QtRO URLs</a></li>
+<li class="level1"><a href="#source-objects">Source objects</a></li>
+<li class="level1"><a href="#identifying-sources">Identifying Sources</a></li>
+<li class="level1"><a href="#replica-objects">Replica objects</a></li>
+<li class="level1"><a href="#replica-initialization">Replica Initialization</a></li>
+<li class="level1"><a href="#the-registry">The Registry</a></li>
+<li class="level1"><a href="#remote-object-interaction">Remote Object Interaction</a></li>
+<li class="level1"><a href="#replica-ownership">Replica Ownership</a></li>
+<li class="level1"><a href="#remote-object-public-classes">Remote Object Public Classes</a></li>
+</ul>
+</div>
+<div class="sidebar-content" id="sidebar-content"></div></div>
+<h1 class="title">Qt Remote Objects</h1>
+<span class="subtitle"></span>
+<!-- $$$qtremoteobjects-index.html-description -->
+<div class="descr"> <a name="details"></a>
+<a name="qt-remote-objects"></a><a name="remote-object-concepts"></a>
+<h2 id="remote-object-concepts">Remote Object Concepts</h2>
+<p>Qt Remote Objects (QtRO) is an inter-process communication (IPC) module developed for Qt. The idea is to extend existing Qt's functionalities to enable an easy exchange of information between processes or computers.</p>
+<p>One of the key features of Qt to enable this is the distinction between an objects API (defined by its Q_Property, Signals and Slots) and the implementation of that API. The purpose of QtRO is to meet the expected API, even if the true <a href="../qtcore/qobject.html">QObject</a> is in a different process. A Slot called on a copy of an object (called a <a href="qtremoteobjects-index.html#replica">Replica</a> in QtRO) is forwarded to the true object (called a <a href="qtremoteobjects-index.html#source">Source</a> in QtRO) for handling. Updates to the <a href="qtremoteobjects-index.html#source">Source</a> (either property changes or emitted Signals) are forwarded to every <a href="qtremoteobjects-index.html#replica">Replica</a>.</p>
+<p>A <a href="qtremoteobjects-index.html#replica">Replica</a> is a light-weight proxy for the <a href="qtremoteobjects-index.html#source">Source</a> object, but one that supports the same connections and behavior of QObjects, which makes them as easy to use as any other <a href="../qtcore/qobject.html">QObject</a> provided by Qt. Everything needed for the <a href="qtremoteobjects-index.html#replica">Replica</a> to look like the <a href="qtremoteobjects-index.html#source">Source</a> object is handled behind the scenes by QtRO.</p>
+<p>Note that Remote Objects behave differently from traditional remote procedure call (RPC) implementations. In RPC, the client makes a request and waits for the response. In RPC, the server does not push anything to the client unless it is in response to a request. The design of RPC is often such that different clients are independent of each other (for instance, two clients can ask a mapping service for directions and get different results). While it is possible to implement this in QtRO (as <a href="qtremoteobjects-index.html#source">Source</a> without properties, and Slots that have return values), it is designed more to hide the fact that the processing is really remote. You let a node give you the <a href="qtremoteobjects-index.html#replica">Replica</a> instead of creating it yourself, possibly use the status signals (<a href="qremoteobjectreplica.html#isReplicaValid">isReplicaValid()</a>), but then interact with the object like you would with any other <a href="../qtcore/qobject.html">QObject</a>-based type.</p>
+<a name="uses"></a>
+<h2 id="uses">Uses</h2>
+<p>Consider a sensor, a global positioning system (GPS) receiver for instance. In QtRO terms, the <a href="qtremoteobjects-index.html#source">Source</a> would be the process that directly interacts with the GPS hardware and derives your current location. The location would be exposed as <a href="../qtcore/qobject.html">QObject</a> properties, and the periodic updates to the location would update the properties and emit property changed signals. <a href="qtremoteobjects-index.html#replica">Replica</a>s would be created in other processes and would always know your current location, but would not need any of the logic to compute the location from the sensor data. Connecting to the location changed Signal on the <a href="qtremoteobjects-index.html#replica">Replica</a> would work as expected, as the signal emitted from the <a href="qtremoteobjects-index.html#source">Source</a> would trigger the Signal emission on every <a href="qtremoteobjects-index.html#replica">Replica</a>.</p>
+<p>Another example of QtRO usage would be for a service (for example, access to a printer). The <a href="qtremoteobjects-index.html#source">Source</a> is again the process controlling the printer directly. Here you would again likely have properties monitoring the ink levels or whether the printer is currently busy. However, the key feature, being able to print something, needs to be passed back to the printer. This aligns with the Qt Slot mechanism, which QtRO uses as the way for <a href="qtremoteobjects-index.html#replica">Replica</a>s to make calls on the <a href="qtremoteobjects-index.html#source">Source</a>. In effect, properties and signals go from <a href="qtremoteobjects-index.html#source">Source</a> to <a href="qtremoteobjects-index.html#replica">Replica</a>s, while slots go from (a) <a href="qtremoteobjects-index.html#replica">Replica</a> to the <a href="qtremoteobjects-index.html#source">Source</a>. Assuming a print request is accepted, the printer status would change, which would change the status property. This would then be reported to all <a href="qtremoteobjects-index.html#replica">Replica</a>s.</p>
+<a name="nodes"></a>
+<h2 id="nodes">Nodes</h2>
+<p>QtRO needs a helper class to make this work: the <a href="qremoteobjectnode.html">QRemoteObjectNode</a>. QRemoteObjectNodes (let's shorten the name to Node for now) are what enables the passing of information between processes. All of the QtRO functionality is enabled by a small number of distinct packets passing the necessary data between nodes.</p>
+<p>Each process that participates in QtRO's IPC will instantiate a Node-based type (<a href="qremoteobjectnode.html">QRemoteObjectNode</a>, <a href="qremoteobjecthost.html">QRemoteObjectHost</a>, or <a href="qremoteobjectregistryhost.html">QRemoteObjectRegistryHost</a>). The latter types of Nodes provide additional functionality. Both <a href="qremoteobjecthost.html">QRemoteObjectHost</a> and <a href="qremoteobjectregistryhost.html">QRemoteObjectRegistryHost</a> support the <a href="qremoteobjecthostbase.html#enableRemoting">enableRemoting()</a> (and the corresponding <a href="qremoteobjecthostbase.html#disableRemoting">disableRemoting()</a>) methods, which are the key methods to expose <a href="qtremoteobjects-index.html#source">Source</a> objects to the network. In order to use the <a href="qtremoteobjects-index.html#registry">Registry</a> functionality, there should be one <a href="qremoteobjectregistryhost.html">QRemoteObjectRegistryHost</a> on the network. All other nodes can then pass the RegistryHost's URL to the Node's <i>registryAddress</i> constructor parameter, or pass the URL to the <a href="qremoteobjectnode.html#registryUrl-prop">setRegistryUrl()</a> method.</p>
+<p>QtRO works as a peer-to-peer network. That is, in order to <a href="qremoteobjectnode.html#acquire">acquire()</a> a valid <a href="qtremoteobjects-index.html#replica">Replica</a>, the <a href="qtremoteobjects-index.html#replica">Replica</a> node needs a connection to the node that hosts its <a href="qtremoteobjects-index.html#source">Source</a>. A host node is a node that allows other nodes to connect to it, which is accomplished by giving hosts unique addresses (the address is provided to the <a href="qremoteobjecthost.html">QRemoteObjectHost</a> constructor or set by the setHostUrl method). The node that a <a href="qtremoteobjects-index.html#replica">Replica</a> is requested from must establish the connection to the host node in order to initialize the <a href="qtremoteobjects-index.html#replica">Replica</a> and keep it up to date.</p>
+<a name="connecting-nodes-using-qtro-urls"></a>
+<h2 id="connecting-nodes-using-qtro-urls">Connecting Nodes using QtRO URLs</h2>
+<p>Host Nodes use custom URLs to simplify connections. While the list will likely be extended, QtRO currently supports two types of connections. A &quot;tcp&quot; connection (using the standard tcp/ip protocol) supports connections between devices as well as between processes on the same device. The 2nd option is a &quot;local&quot; connection - which can have less overhead, depending on the underlying OS features - but does not support connectivity between devices.</p>
+<p>When using a local connection, a unique name must be used. For tcp connections, a unique address and port number combination much be used.</p>
+<p>There is currently no <a href="http://www.zeroconf.org/">zeroconf</a> facility included in QtRO. All processes or devices must therefore know beforehand how to connect to each other. A <a href="qremoteobjectregistry.html">QRemoteObjectRegistry</a> (see below) can be used to simplify the connection process for a network with multiple Host Nodes.</p>
+<p>Connection types are summarized in the following table.</p>
+<div class="table"><table class="generic" width="90%">
+ <thead><tr class="qt-style"><th >URL</th><th >Host Node</th><th >Connecting Node</th></tr></thead>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qurl.html">QUrl</a>(&quot;local:replica&quot;)</td><td ><a href="../qtnetwork/qlocalserver.html">QLocalServer</a>(&quot;replica&quot;)</td><td ><a href="../qtnetwork/qlocalsocket.html">QLocalSocket</a>(&quot;replica&quot;)</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qurl.html">QUrl</a>(&quot;tcp://192.168.1&#x2e;1:9999&quot;)</td><td ><a href="../qtnetwork/qtcpserver.html">QTcpServer</a>(&quot;192.168.1&#x2e;1&quot;,9999)</td><td ><a href="../qtnetwork/qtcpsocket.html">QTcpSocket</a>(&quot;192.168.1&#x2e;1&quot;,9999)</td></tr>
+</table></div>
+<p>Nodes have a couple of <a href="qremoteobjecthostbase.html#enableRemoting">enableRemoting()</a> methods that are used to share objects on the network (this will produce an error if the Node is not a Host Node however). Other processes/devices that want to interact with a shared object use one of the <a href="qremoteobjectnode.html#acquire">node's acquire()</a> methods to instantiate a replica.</p>
+<a name="source"></a><a name="source-objects"></a>
+<h2 id="source-objects">Source objects</h2>
+<p>A Remote Object Source is the <a href="../qtcore/qobject.html">QObject</a> that is responsible for the implementation of the exposed API.</p>
+<p>At a high level, you have a choice of using a <a href="../qtcore/qobject.html">QObject</a> type directly as a source or defining the desired API in a .rep template for use with the <a href="remoteobjects-repc.html">repc</a> compiler.</p>
+<p>If you already have a fully defined <a href="../qtcore/qobject.html">QObject</a>, it can become a Source simply by passing it to <a href="qremoteobjecthostbase.html#enableRemoting">QRemoteObjectHostBase::enableRemoting</a>(). This lets other processes/devices create a <a href="qtremoteobjects-index.html#replica">Replica</a> of the object to interact with (see <a href="qtremoteobjects-index.html#remote-object-interaction">Remote Object Interaction</a>). You can then instantiate <a href="qremoteobjectdynamicreplica.html">QRemoteObjectDynamicReplica</a>s of your object, or use the <a href="remoteobjects-repc.html#qobject-replica">QOBJECT_REPLICA</a> macro in your project file, which will use <a href="remoteobjects-repc.html">repc</a> to create a header file describing the Replica for use in that process/on that device (and provides compile-time checks).</p>
+<p>Letting <a href="remoteobjects-repc.html">repc</a> generate a <a href="qtremoteobjects-index.html#source">Source</a> header file for your project (using the <a href="remoteobjects-repc.html#repc-source">REPC_SOURCE</a> macro) provides three options of implementing the desired API. If your class name was Foo, the options would be the following (and see <a href="remoteobjects-repc.html#the-rep-file-format">The rep file format</a> for help in creating a rep file)</p>
+<ul>
+<li><a href="qtremoteobjects-index.html#typesimplesource">FooSimpleSource</a> inheritance</li>
+<li><a href="qtremoteobjects-index.html#typesource">FooSource</a> inheritance</li>
+<li><a href="qtremoteobjects-index.html#typeapi">FooSourceAPI</a> usage with your own <a href="../qtcore/qobject.html">QObject</a></li>
+</ul>
+<a name="typesimplesource"></a><p>There is a &lt;Type&gt;SimpleSource class defined in the header, which provides basic getter/setter methods for each property and implements data members of the correct property type in the header. Here &quot;&lt;Type&gt;&quot; represents the class name from the .rep file, so if your class is of type &quot;MyType&quot; in the .rep file, there will be a MyTypeSimpleSource class declared in the produced header file. This is a fast way to get started using the API. To use this class, you need to inherit from this class and implement any defined slots (which are pure virtual in the generated header file). Whatever logic is needed to manage the exposed properties and define when Signals need to be emitted would be added to the overriding class as well.</p>
+<a name="typesource"></a><p>If you need to hide the implementation details, you can use the &lt;Type&gt;Source class instead, which is the 2nd class declared in the same resulting header file. This class definition does not provide data members, and makes the getter/setter functions pure virtual as well. You have more flexibility in how you implement the class, although you need to write more code. This defines the API for both the source and replica side from a single .rep template file.</p>
+<a name="typeapi"></a><p>Finally, there is the &lt;Type&gt;SourceAPI class generated in the header. This is a templated class, for use specifically by the templated version of <a href="qremoteobjecthostbase.html#enableRemoting">QRemoteObjectHostBase::enableRemoting</a>() function overload, which allows you to use any <a href="../qtcore/qobject.html">QObject</a> that supports the desired API as the source. You will get compile-time warnings if the class does not provide the correct API, and using this class allows you to hide or convert properties or signal/slot parameters.</p>
+<p><b>Note: </b>The <a href="../qtcore/qobject.html">QObject</a> API is <b>never</b> exposed. For instance, while a <a href="qtremoteobjects-index.html#replica">Replica</a> will have a destroyed signal, the destroyed signal of the source is not propagated. The <a href="qtremoteobjects-index.html#source">Source</a> and each <a href="qtremoteobjects-index.html#replica">Replica</a> are unique QObjects with their own connections. The API that is exposed is defined by the .rep template used by <a href="remoteobjects-repc.html">repc</a>, or in the case of raw QObjects, all API elements defined in the inheritance chain from a specific ancestor. Unless you define <a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>(&quot;RemoteObject Type&quot;) in an ancestor, the <a href="../qtcore/qobject.html">QObject</a>'s parent is used. If <a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>(&quot;RemoteObject Type&quot;) is used, that class's API is the lowest level of API used.</p><a name="identifying-sources"></a>
+<h2 id="identifying-sources">Identifying Sources</h2>
+<p>Since more than one <a href="qtremoteobjects-index.html#source">Source</a> can be shared by a host node, each <a href="qtremoteobjects-index.html#source">Source</a> requires a name. All <a href="remoteobjects-repc.html">repc</a> generated headers include a way for the node to determine the class name (<a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a> for replica/simplesource/source types, or a static name() function for the SourceAPI type). If you pass your own <a href="../qtcore/qobject.html">QObject</a> type to <a href="qremoteobjecthostbase.html#enableRemoting">QRemoteObjectHostBase::enableRemoting</a>(), the name will be determined using the following logic:</p>
+<ul>
+<li>If the object or any of its ancestors has <a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a> of type &quot;RemoteObject Type&quot; defined, the provided name will be used.</li>
+<li>Otherwise, the <a href="../qtcore/qobject.html">QObject</a>'s objectName (if set) will be used.</li>
+<li>If neither is available, the call to <a href="qremoteobjecthostbase.html#enableRemoting">QRemoteObjectHostBase::enableRemoting</a>() will fail, returning False.</li>
+</ul>
+<a name="replica"></a><a name="replica-objects"></a>
+<h2 id="replica-objects">Replica objects</h2>
+<p>A remote object replica is a proxy object that has (approximately) the same API as the <a href="qtremoteobjects-index.html#source">Source</a> <a href="../qtcore/qobject.html">QObject</a> it is replicating. There are a few additional properties and signals to make it possible to detect when the Replica is initialized or if it loses the connectivity to the <a href="qtremoteobjects-index.html#source">Source</a> object. There are a few other differences: a constant property on the source cannot be constant on the replica. The value will not be known at the time the replica is instantiated, it will only be known once the replica is initialized (see <a href="qtremoteobjects-index.html#remote-object-interaction">Remote Object Interaction</a>).</p>
+<p>A compiled replica is a <a href="qremoteobjectreplica.html">QRemoteObjectReplica</a> based type, where the derived class definition is automatically generated by the <a href="remoteobjects-repc.html">repc</a> compiler. Only a header file is generated (and using the <a href="remoteobjects-repc.html#repc-replica">REPC_REPLICA</a> macro in your .pro file can make generation part of the build process), but it is a complete type. There is no public constructor, you need to use the <a href="qremoteobjectnode.html#acquire">QRemoteObjectNode::acquire</a> template function to create the Replica instance.</p>
+<p>A <a href="qremoteobjectdynamicreplica.html">QRemoteObjectDynamicReplica</a> can be generated at runtime. To do so, you call the non-templated version of <a href="qremoteobjectnode.html#acquire">QRemoteObjectNode::acquire</a>(), passing in as an argument the <a href="qtremoteobjects-index.html#source">Source</a> name (a <a href="../qtcore/qstring.html">QString</a>). Dynamic replicas are a bit more verbose to use from C++, but do not require compilation and can be used easily in QML or (potentially) exposed to scripting languages such as Python. Dynamic replicas do not support initial property values, and do not support introspection until they have been initialized.</p>
+<p>An important difference between these two ways of creating replicas is the behavior before the replica is initialized. Since a Dynamic replica only gets a metaObject after initialization, it basically has no API before initialization. No properties, and no Signals to connect slots to. Due to the compile-time creation of the metaObject for compiled replicas, their API is available when the replica is instantiated. You can even provide default values for Properties in the template file, which will be used until the replica is initialized with current values from the Source.</p>
+<p>See <a href="qremoteobjectreplica.html">QRemoteObjectReplica</a> and <a href="qremoteobjectdynamicreplica.html">QRemoteObjectDynamicReplica</a></p>
+<a name="replica-initialization"></a>
+<h2 id="replica-initialization">Replica Initialization</h2>
+<p>A host node will share the list of sources it hosts and every other node that connects to it. It will send updates when sources are added or removed from the list. In this way, a connected node will always know what sources it can attach to. Changes to a specific <a href="qtremoteobjects-index.html#source">Source</a> are only propagated to nodes that have a replica of that source. This avoids unnecessary network traffic.</p>
+<p>When a node acquires a replica for a known source, the replica node sends a request for that source to the host node. Upon receipt of this request, the host will create a reply packet with the current values of all properties of the source. If the requested replica is dynamic, it will include the API definition for the source. The replica node will be included in the list of connections that receive changes to that source from then on.</p>
+<p>If a replica is instantiated but the node is not connected to the node that hosts the requested source (or that object lives in a host node process, but sharing/remoting has not been enabled for the <a href="../qtcore/qobject.html">QObject</a>), the Replica will still be created, it will just remain uninitialized.</p>
+<p>If, at a later time, the replica node gets notified that the requested source is available from a connected node, it will at that point request the source and start the initialization process.</p>
+<p>If the connection to a host node is lost, the replica will transition to the invalid state. It will attempt to reconnect and will re-initialize if the connection is restored (this making sure all Properties are current).</p>
+<a name="registry"></a><a name="the-registry"></a>
+<h2 id="the-registry">The Registry</h2>
+<p>When you <a href="qremoteobjectnode.html#acquire">QRemoteObjectNode::acquire</a>() a replica, the node URL is not passed as an argument. This means you do not need to specify the host node, but it does require you to have some other means of connecting to that host. Without the registry, it is necessary to manually call <a href="../qtcore/qobject.html#connect-4">QRemoteObjectNode::connect</a>(), from each node, to every host node that has <a href="qtremoteobjects-index.html#source">Source</a> objects it should replicate. This is fine for small or static networks, but does not scale.</p>
+<p>The registry provides a simpler way to establish these connections. Every node that wants to be part of the registry's network connects to the registry. The registry is itself a specialized source object, and thus is hosted by a node. Connecting to the registry is simply a matter of passing the registry's URL to the <a href="qremoteobjectnode.html">QRemoteObjectNode</a> or <a href="qremoteobjecthost.html">QRemoteObjectHost</a> constructor, or passing the URL to the setRegistryUrl method.</p>
+<p>The registry is tightly integrated with QtRO. Whenever a <a href="qtremoteobjects-index.html#source">Source</a> is added or removed, the name/URL is updated in the registry automatically. So once your node is connected to the registry, it is not necessary to connect to any other nodes manually. If you request an object on the network and you aren't connected to the hosting node, the registry will know what URL to connect to and will initiate the connection. Once connected (and the list of available objects is passed along, including the desired <a href="qtremoteobjects-index.html#source">Source</a>), the initialization process for the requested <a href="qtremoteobjects-index.html#replica">Replica</a> will start automatically.</p>
+<a name="remote-object-interaction"></a>
+<h2 id="remote-object-interaction">Remote Object Interaction</h2>
+<p>Source/replica interaction is directional. Property changes and signal emission happen on the source, and are propagated to all replicas. If a property is writable, you can call the setter function on a replica. This will be forwarded to the source, and if a change is made, it will be made on the source and subsequently forwarded to all replicas. To the replica, it is then an asynchronous call, with latency before the change takes effect.</p>
+<p>Whereas you can emit a signal on a replica, this may have unexpected results and is discouraged for that reason. It will only trigger slots connected to the replica itself, no slots connected to the source or other replicas. Like property setters, slot invocations on a replica are forwarded to the Source to run.</p>
+<p>The behavior above is implemented automatically by QtRO, there is no need to write any replica implementation code. It will be handled automatically at runtime for dynamic replicas, or at compile time for repc generated headers.</p>
+<a name="replica-ownership"></a>
+<h2 id="replica-ownership">Replica Ownership</h2>
+<p>The acquire methods return a pointer to the replica <a href="../qtcore/qobject.html">QObject</a> instantiated by the node. The node has no way of knowing the intended lifetime of the replica, so it is the responsibility of the calling program to delete the replica when it is no longer needed.</p>
+<p>You can instantiate multiple copies of the same replica (this may be necessary in QML for instance). All replicas of the same source from a single node will share a private data member which handles the network communication. This means multiple instances of a <a href="qtremoteobjects-index.html#replica">Replica</a> do not introduce additional network traffic, although there will be some additional processing overhead. Failing to delete replicas will prevent the reference count on this private object to be invalid, and cause unnecessary network communication until the calling process exits. For this reason, it is recommended that <a href="../qtcore/qscopedpointer.html">QScopedPointer</a> or <a href="../qtcore/qsharedpointer.html">QSharedPointer</a> be used to help track a replica lifetime.</p>
+<a name="remote-object-public-classes"></a>
+<h2 id="remote-object-public-classes">Remote Object Public Classes</h2>
+<p>The following classes make up the public interface for Qt Remote Objects:</p>
+<div class="table"><table class="annotated">
+<tr class="odd topAlign"><td class="tblName"><p><a href="qtroclientfactory.html">QtROClientFactory</a></p></td><td class="tblDescr"><p>A class holding information about client backends available on the Qt Remote Objects network</p></td></tr>
+<tr class="even topAlign"><td class="tblName"><p><a href="qtroserverfactory.html">QtROServerFactory</a></p></td><td class="tblDescr"><p>A class holding information about server backends available on the Qt Remote Objects network</p></td></tr>
+<tr class="odd topAlign"><td class="tblName"><p><a href="qremoteobjectdynamicreplica.html">QRemoteObjectDynamicReplica</a></p></td><td class="tblDescr"><p>A dynamically instantiated Replica</p></td></tr>
+<tr class="even topAlign"><td class="tblName"><p><a href="qremoteobjecthost.html">QRemoteObjectHost</a></p></td><td class="tblDescr"><p>A (Host) Node on a Qt Remote Objects network</p></td></tr>
+<tr class="odd topAlign"><td class="tblName"><p><a href="qremoteobjecthostbase.html">QRemoteObjectHostBase</a></p></td><td class="tblDescr"><p>Base functionality common to Host and RegistryHost classes</p></td></tr>
+<tr class="even topAlign"><td class="tblName"><p><a href="qremoteobjectnode.html">QRemoteObjectNode</a></p></td><td class="tblDescr"><p>A node on a Qt Remote Objects network</p></td></tr>
+<tr class="odd topAlign"><td class="tblName"><p><a href="qremoteobjectpersistedstore.html">QRemoteObjectPersistedStore</a></p></td><td class="tblDescr"><p>Virtual class provides the methods for setting PROP values of a replica to value they had the last time the replica was used</p></td></tr>
+<tr class="even topAlign"><td class="tblName"><p><a href="qremoteobjectregistryhost.html">QRemoteObjectRegistryHost</a></p></td><td class="tblDescr"><p>A (Host/Registry) node on a Qt Remote Objects network</p></td></tr>
+<tr class="odd topAlign"><td class="tblName"><p><a href="qremoteobjectregistry.html">QRemoteObjectRegistry</a></p></td><td class="tblDescr"><p>A class holding information about Source objects available on the Qt Remote Objects network</p></td></tr>
+<tr class="even topAlign"><td class="tblName"><p><a href="qremoteobjectreplica.html">QRemoteObjectReplica</a></p></td><td class="tblDescr"><p>A class interacting with (but not implementing) a Qt API on the Remote Object network</p></td></tr>
+</table></div>
+</div>
+<!-- @@@qtremoteobjects-index.html -->
+        </div>
+       </div>
+   </div>
+   </div>
+</div>
+<div class="footer">
+   <p>
+   <acronym title="Copyright">&copy;</acronym> 2017 The Qt Company Ltd.
+   Documentation contributions included herein are the copyrights of
+   their respective owners.<br>    The documentation provided herein is licensed under the terms of the    <a href="http://www.gnu.org/licenses/fdl.html">GNU Free Documentation    License version 1.3</a> as published by the Free Software Foundation.<br>    Qt and respective logos are trademarks of The Qt Company Ltd.     in Finland and/or other countries worldwide. All other trademarks are property
+   of their respective owners. </p>
+</div>
+</body>
+</html>
