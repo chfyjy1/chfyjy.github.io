@@ -34,3 +34,5 @@ equivalent 等同
 prevent 阻止
 resolve 解析
 symbol 符号
+license 许可
+functionality 功能 函数
