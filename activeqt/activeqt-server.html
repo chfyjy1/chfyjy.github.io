@@ -1,0 +1,591 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<!-- qtaxserver.qdoc -->
+  <title>Building ActiveX servers in Qt | Active Qt 5.9</title>
+  <link rel="stylesheet" type="text/css" href="style/offline-simple.css" />
+  <script type="text/javascript">
+    window.onload = function(){document.getElementsByTagName("link").item(0).setAttribute("href", "style/offline.css");};
+  </script>
+</head>
+<body>
+<div class="header" id="qtdocheader">
+  <div class="main">
+    <div class="main-rounded">
+      <div class="navigationbar">
+        <table><tr>
+<td ><a href="../qtdoc/supported-platforms-and-configurations.html#qt-5-9">Qt 5.9</a></td><td ><a href="activeqt-index.html">Active Qt</a></td><td >在Qt中构建ActiveX服务器</td></tr></table><table class="buildversion"><tr>
+<td id="buildversion" width="100%" align="right">Qt 5.9.0 手册</td>
+        </tr></table>
+      </div>
+    </div>
+<div class="content">
+<div class="line">
+<div class="content mainContent">
+<div class="sidebar">
+<div class="toc">
+<h3><a name="toc">Contents</a></h3>
+<ul>
+<li class="level1"><a href="#using-the-library">库的使用</a></li>
+<li class="level2"><a href="#out-of-process-vs-in-process">跨进程与进程内</a></li>
+<li class="level2"><a href="#typical-errors-during-the-post-build-steps">Post-Build步骤中的典型错误</a></li>
+<li class="level1"><a href="#implementing-controls">控件实现</a></li>
+<li class="level2"><a href="#data-types">数据类型</a></li>
+<li class="level2"><a href="#sub-objects">子对象</a></li>
+<li class="level2"><a href="#property-notification">属性通知</a></li>
+<li class="level1"><a href="#serving-controls">服务控制</a></li>
+<li class="level2"><a href="#typical-compile-time-problems">典型的编译时问题</a></li>
+<li class="level2"><a href="#distributing-qaxserver-binaries">分发QAxServer的二进制文件</a></li>
+<li class="level1"><a href="#using-the-controls">控件使用</a></li>
+<li class="level2"><a href="#supported-and-unsupported-activex-clients">支持和不支持的ActiveX客户端</a></li>
+<li class="level2"><a href="#typical-runtime-errors">典型的运行时问题</a></li>
+<li class="level2"><a href="#debugging-runtime-errors">运行时错误调试</a></li>
+<li class="level1"><a href="#class-information-and-tuning">类信息与更新</a></li>
+<li class="level2"><a href="#developing-licensed-components">开发受许可组件</a></li>
+<li class="level2"><a href="#more-interfaces">更多接口</a></li>
+</ul>
+</div>
+<div class="sidebar-content" id="sidebar-content"></div></div>
+<h1 class="title">在Qt中构建ActiveX服务器</h1>
+<span class="subtitle"></span>
+<!-- $$$activeqt-server.html-description -->
+<div class="descr"> <a name="details"></a>
+<p><a href="qaxserver-module.html">QAxServer</a>是<a href="activeqt-index.html">ActiveQt</a>框架的一部分.它包含三个类:</p>
+<ul>
+<li><a href="qaxfactory.html">QAxFactory</a>被定义用来创建COM对象</li>
+<li><a href="qaxbindable.html">QAxBindable</a>提供一个Qt窗体和COM对象间接口.</li>
+<li><a href="qaxaggregated.html">QAxAggregated</a>可以被子类化以实现额外的COM接口.</li>
+</ul>
+<p>提供了一些关于ActiveX控件和COM对象实现的<a href="../qtdoc/examples-activeqt.html">示例</a></p>
+<p>详细描述:</p>
+<a name="using-the-library"></a>
+<h2 id="using-the-library">库的使用</h2>
+<p>将标准的其他应用程序转变为COM服务器使用了<a href="qaxserver-module.html">QAxServer</a>库，必须将<code>axserver</code>添加到<code>.pro</code>文件的QT变量中.</p>
+<p>一个跨进程的可执行服务器是从如下<code>.pro</code>文件生成的:</p>
+<pre class="cpp">
+
+  TEMPLATE = app
+  QT  += axserver
+
+  RC_FILE  = qaxserver.rc
+  ...
+
+</pre>
+<p>构建一个进程内的COM服务器则像下边这样编辑<code>.pro</code>文件:</p>
+<pre class="cpp">
+
+  TEMPLATE = lib
+  QT += axserver
+  CONFIG  += dll
+
+  DEF_FILE = qaxserver.def
+  RC_FILE  = qaxserver.rc
+  ...
+
+</pre>
+<p><code>qaxserver.rc</code>和<code>qaxserver.def</code>文件是框架的一部分，可以引用它们的常用位置(在<code>.pro</code>文件中设置路径),或者直接将它们拷贝到项目目录.你可以修改这些只要是作为类型库入口而被包含的任何文件.例如你可以添加版本信息,或者指定一个不同的工具箱图标.</p>
+<p>使用<code>axserver</code>模块将会使<code>qmake</code>工具向构建系统添加一些所需的构建步骤:</p>
+<ul>
+<li>二进制文件需要链接到<code>qaxserver.lib</code>而不是<code>qtmain.lib</code></li>
+<li>使用<a href="../qtdoc/activeqt-idc.html">idc</a>工具来为COM服务器生成IDL文件</li>
+<li>使用MIDL工具将IDL编译成一个类型库(编译安装的一部分)</li>
+<li>将生成的类型库作为二进制资源添加到服务器的二进制文件中(依然使用<a href="../qtdoc/activeqt-idc.html">idc</a>工具)</li>
+<li>注册服务器</li>
+</ul>
+<p>为了跳过后处理步骤,还要进行<code>qaxserver_no_postlink</code>设置.</p>
+<p>另外可以使用<code>VERSION</code>变量指定版本号,例如:</p>
+<pre class="cpp">
+
+  TEMPLATE = lib
+  VERSION = 2.5
+  ...
+
+</pre>
+<p>在注册时被指定的版本号还将作为类型库和服务器的版本号.</p>
+<a name="out-of-process-vs-in-process"></a>
+<h3 >跨进程与进程内</h3>
+<p>COM服务器到底是作为一个独立的可执行程序还是一个共享库主要取决于在服务器中所提供的COM对象的类型.</p>
+<p>一个可执行的服务器程序优于一个独立的应用程序但是增加了COM客户端与COM对象间的通信开销.如果一个控件出现编程错误,那么运行了该控件的服务器端将会崩溃而客户端可以能够继续运行.不是所有的COM客户端都支持可运行的服务端程序.</p>
+<p>进程内服务器通常更小,启动时间也更快.客户端和服务器之间的通信是通过虚拟函数调用直接完成的,并且没有引入远程过程调用所增加的开销. 然而,如果服务端崩溃,那么客户端程序也会崩溃,而且并不是所有功能都适用进程内服务器 (例如无法再COM的运行对象表(ROT)中注册.</p>
+<p>这两种服务器都可以使用Qt作为共享库或者静态的链接到服务器的二进制文件中.</p>
+<a name="typical-errors-during-the-post-build-steps"></a>
+<h3 >Post-Build步骤中的典型错误</h3>
+<p>为使<a href="activeqt-index.html">ActiveQt</a>的特定的post-processing步骤对服务器有效必须满足一下要求:</p>
+<ul>
+<li>所有的控件可以通过唯一实例<a href="../qtwidgets/qapplication.html">QApplication</a>来创建</li>
+<li>服务器的初始链接包括一个临时的类型库资源.</li>
+<li>运行服务器所需的所有以来项都存在与系统路径中(或者在调用环境所使用的的路径内.提示:Visual Studio需要单独地对它的环境变量在Tools|Options|Directories对话框中进行设置).</li>
+</ul>
+<p>如果这些要求有一个或多个没有满足,可能会出现如下错误:</p>
+<a name="the-server-executable-crashes"></a>
+<h4 >The Server Executable Crashes</h4>
+<p>为了生成IDL,widgets作为控件导出需要被实例化(构造函数已经被调用).这时只存在一个<a href="../qtwidgets/qapplication.html">QApplication</a>对象.widget构造函数不能附在任何其他没有被创建的对象上,以防止指向空指针</p>
+<p>可以运行-dumpidl outputfile进行调试以检查哪里发生了崩溃.</p>
+<p>注意,没有控件的函数被调用.</p>
+<a name="the-server-executable-is-not-a-valid-win32-application"></a>
+<h4 >The Server Executable Is Not a Valid Win32 Application</h4>
+<p>添加的类型库损坏了服务器的二进制文件.这是一个windows下的bug发生在进行release版本构建时.</p>
+<p>在链接的第一步需要将一个虚拟(dummy)的类型库链接到可执行文件它会在之后被idc替换.可以像示例一样在项目文件中加入一个带有类型库的资源文件.</p>
+<a name="unable-to-locate-dll"></a>
+<h4 >&quot;Unable to locate DLL&quot;</h4>
+<p>构建系统需要运行服务器可执行文件来生成接口定义,并注册服务器.如果动态链接库不在服务器所连接的路径中,那么会失败.(例如:Visual Studio调用服务器时在环境设置的&quot;Directories&quot;选项中设置).必须确保所有服务器所需的的动态链接库和插件都位于错误消息框打印的路径中(也可参看 <a href="../qtdoc/windows-deployment.html#the-windows-deployment-tool">The Windows Deployment Tool</a>).</p>
+<a name="cannot-open-file"></a>
+<h4 >&quot;Cannot open file ..&#x2e;&quot;</h4>
+<p>当最后一个客户端停止使用它时,ActiveX服务器无法正常关闭.通常应用关闭时需要等待两秒,但也可以通过任务管理器杀死该进程.(当客户端不正确释放控件时).</p>
+<a name="the-control-cannot-be-instantiated"></a>
+<h4 >The Control Cannot be Instantiated</h4>
+<p>如果是这样,则需使用管理员权限为服务器注册.</p>
+<a name="implementing-controls"></a>
+<h2 id="implementing-controls">控件实现</h2>
+<p>使用Qt实现一个COM对象,会创建一个或会有任意一个<a href="../qtcore/qobject.html">QObject</a>的子类.如果这个类是<a href="../qtwidgets/qwidget.html">QWidget</a>的子类,那么这个COM对象就会是ActiveX控件.</p>
+<pre class="cpp">
+
+  <span class="preprocessor">#include &lt;QWidget&gt;</span>
+
+  <span class="keyword">class</span> MyActiveX : <span class="keyword">public</span> <span class="type">QWidget</span>
+  {
+      Q_OBJECT
+
+</pre>
+<p><a href="../qtcore/qobject.html#Q_OBJECT">Q_OBJECT</a>宏被用来为<a href="activeqt-index.html">ActiveQt</a>框架提供关于widget的元对象信息</p>
+<pre class="cpp">
+
+  Q_CLASSINFO(<span class="string">&quot;ClassID&quot;</span><span class="operator">,</span> <span class="string">&quot;{1D9928BD-4453-4bdd-903D-E525ED17FDE5}&quot;</span>)
+  Q_CLASSINFO(<span class="string">&quot;InterfaceID&quot;</span><span class="operator">,</span> <span class="string">&quot;{99F6860E-2C5A-42ec-87F2-43396F4BE389}&quot;</span>)
+  Q_CLASSINFO(<span class="string">&quot;EventsID&quot;</span><span class="operator">,</span> <span class="string">&quot;{0A3E9F27-E4F1-45bb-9E47-63099BCCD0E3}&quot;</span>)
+
+</pre>
+<p>使用<a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>()宏用来为COM对象指定标识符. <code>ClassID</code>和<code>InterfaceID</code>是必须的,而<code>EventsID</code>在对象有信号时才必须被使用.这些标识符可以通过系统工具<code>uuidgen</code> or <code>guidgen</code>生成.</p>
+<p>可以为你的每个类指定额外的属性,详情可以参看<a href="activeqt-server.html#class-information-and-tuning">类信息和更新</a>.</p>
+<pre class="cpp">
+
+  Q_PROPERTY(<span class="type">int</span> value READ value WRITE setValue)
+
+</pre>
+<p>使用<a href="../qtcore/qobject.html#Q_PROPERTY">Q_PROPERTY</a>()宏为ActiveX控件声明属性.</p>
+<p>像任何y <a href="../qtcore/qobject.html">QObject</a>子类一样声明了一个继承自父对象的构造函数,功能,信号,槽. </p>
+<!-- <p>If a standard constructor is not present the compiler will issue an error &quot;no overloaded function takes 2 parameters&quot; when using the default factory through the <a href="qaxfactory.html#QAXFACTORY_DEFAULT">QAXFACTORY_DEFAULT</a>() macro. If you cannot provide a standard constructor you must implement a <a href="qaxfactory.html">QAxFactory</a> custom factory and call the constructor you have in your implementation of <a href="qaxfactory.html#createObject">QAxFactory::createObject</a>.</p>
+--><pre class="cpp">
+
+  <span class="keyword">public</span>:
+      MyActiveX(<span class="type">QWidget</span> <span class="operator">*</span>parent <span class="operator">=</span> <span class="number">0</span>)
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+
+      <span class="type">int</span> value() <span class="keyword">const</span>;
+
+  <span class="keyword">public</span> <span class="keyword">slots</span>:
+      <span class="type">void</span> setValue(<span class="type">int</span> v);
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+
+  <span class="keyword">signals</span>:
+      <span class="type">void</span> valueChange(<span class="type">int</span> v);
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+
+  };
+
+</pre>
+<p><a href="activeqt-index.html">ActiveQt</a>框架会导出属性,公有槽,信号作为ActiveX的属性,方法,事件.并将Qt的数据类型转换为等同的COM数据类型.</p>
+<a name="data-types"></a>
+<h3 >数据类型</h3>
+<p>Qt与COM属性转换对照:</p>
+<div class="table"><table class="generic">
+ <thead><tr class="qt-style"><th >Qt data type</th><th >COM property</th></tr></thead>
+<tr valign="top" class="odd"><td >bool</td><td >VARIANT_BOOL</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qstring.html">QString</a></td><td >BSTR</td></tr>
+<tr valign="top" class="odd"><td >int</td><td >int</td></tr>
+<tr valign="top" class="even"><td >uint</td><td >unsigned int</td></tr>
+<tr valign="top" class="odd"><td >double</td><td >double</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qtglobal.html#qlonglong-typedef">qlonglong</a></td><td >CY</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qtglobal.html#qulonglong-typedef">qulonglong</a></td><td >CY</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtgui/qcolor.html">QColor</a></td><td >OLE_COLOR</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qdate.html">QDate</a></td><td >DATE</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qdatetime.html">QDateTime</a></td><td >DATE</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qtime.html">QTime</a></td><td >DATE</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtgui/qfont.html">QFont</a></td><td >IFontDisp*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtgui/qpixmap.html">QPixmap</a></td><td >IPictureDisp* <!-- <p>COM cannot marshal IPictureDisp across process boundaries, so <a href="../qtgui/qpixmap.html">QPixmap</a> properties cannot be called for out-of-process servers. You can however marshal the image data via e.g&#x2e; temporary files. See the Microsoft <a href="http://support.microsoft.com/default.aspx?scid=kb;[LN];Q150034">KB article Q150034</a> for more information.</p>
+--></td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qvariant.html">QVariant</a></td><td >VARIANT</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qvariant.html#QVariantList-typedef">QVariantList</a> (same as <a href="../qtcore/qlist.html">QList</a>&lt;<a href="../qtcore/qvariant.html">QVariant</a>&gt;)</td><td >SAFEARRAY(VARIANT)</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qstringlist.html">QStringList</a></td><td >SAFEARRAY(BSTR)</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qbytearray.html">QByteArray</a></td><td >SAFEARRAY(BYTE)</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qrect.html">QRect</a></td><td >User defined type</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qsize.html">QSize</a></td><td >User defined type</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qpoint.html">QPoint</a></td><td >User defined type</td></tr>
+</table></div>
+<p>在信号槽中作为参数时的数据类型转换对照:</p>
+<div class="table"><table class="generic">
+ <thead><tr class="qt-style"><th >Qt data type</th><th >COM parameter</th></tr></thead>
+<tr valign="top" class="odd"><td >bool</td><td >[in] VARIANT_BOOL</td></tr>
+<tr valign="top" class="even"><td >bool&amp;</td><td >[in, out] VARIANT_BOOL*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qstring.html">QString</a>, const <a href="../qtcore/qstring.html">QString</a>&amp;</td><td >[in] BSTR</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qstring.html">QString</a>&amp;</td><td >[in, out] BSTR*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qstring.html">QString</a>&amp;</td><td >[in, out] BSTR*</td></tr>
+<tr valign="top" class="even"><td >int</td><td >[in] int</td></tr>
+<tr valign="top" class="odd"><td >int&amp;</td><td >[in,out] int</td></tr>
+<tr valign="top" class="even"><td >uint</td><td >[in] unsigned int</td></tr>
+<tr valign="top" class="odd"><td >uint&amp;</td><td >[in, out] unsigned int*</td></tr>
+<tr valign="top" class="even"><td >double</td><td >[in] double</td></tr>
+<tr valign="top" class="odd"><td >double&amp;</td><td >[in, out] double*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtgui/qcolor.html">QColor</a>, const <a href="../qtgui/qcolor.html">QColor</a>&amp;</td><td >[in] OLE_COLOR</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtgui/qcolor.html">QColor</a>&amp;</td><td >[in, out] OLE_COLOR*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qdate.html">QDate</a>, const <a href="../qtcore/qdate.html">QDate</a>&amp;</td><td >[in] DATE</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qdate.html">QDate</a>&amp;</td><td >[in, out] DATE*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qdatetime.html">QDateTime</a>, const <a href="../qtcore/qdatetime.html">QDateTime</a>&amp;</td><td >[in] DATE</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qdatetime.html">QDateTime</a>&amp;</td><td >[in, out] DATE*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtgui/qfont.html">QFont</a>, const <a href="../qtgui/qfont.html">QFont</a>&amp;</td><td >[in] IFontDisp*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtgui/qfont.html">QFont</a>&amp;</td><td >[in, out] IFontDisp**</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtgui/qpixmap.html">QPixmap</a>, const <a href="../qtgui/qpixmap.html">QPixmap</a>&amp;</td><td >[in] IPictureDisp*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtgui/qpixmap.html">QPixmap</a>&amp;</td><td >[in, out] IPictureDisp**</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qlist.html">QList</a>&lt;<a href="../qtcore/qvariant.html">QVariant</a>&gt;, const <a href="../qtcore/qlist.html">QList</a>&lt;<a href="../qtcore/qvariant.html">QVariant</a>&gt;&amp;</td><td >[in] SAFEARRAY(VARIANT)</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qlist.html">QList</a>&lt;<a href="../qtcore/qvariant.html">QVariant</a>&gt;&amp;</td><td >[in, out] SAFEARRAY(VARIANT)*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qstringlist.html">QStringList</a>, const <a href="../qtcore/qstringlist.html">QStringList</a>&amp;</td><td >[in] SAFEARRAY(BSTR)</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qstringlist.html">QStringList</a>&amp;</td><td >[in, out] SAFEARRAY(BSTR)*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qbytearray.html">QByteArray</a>, const <a href="../qtcore/qbytearray.html">QByteArray</a>&amp;</td><td >[in] SAFEARRAY(BYTE)</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qbytearray.html">QByteArray</a>&amp;</td><td >[in, out] SAFEARRAY(BYTE)*</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qobject.html">QObject</a>*</td><td >[in] IDispatch*</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qrect.html">QRect</a>&amp; <!-- <p>OLE needs to marshal user defined types by reference (ByRef), and cannot marshal them by value (ByVal). This is why const-references and object parameters are not supported for <a href="../qtcore/qrect.html">QRect</a>, <a href="../qtcore/qsize.html">QSize</a> and <a href="../qtcore/qpoint.html">QPoint</a>.</p>
+--></td><td >[in, out] struct <a href="../qtcore/qrect.html">QRect</a> (user defined)</td></tr>
+<tr valign="top" class="even"><td ><a href="../qtcore/qsize.html">QSize</a>&amp;</td><td >[in, out] struct <a href="../qtcore/qsize.html">QSize</a> (user defined)</td></tr>
+<tr valign="top" class="odd"><td ><a href="../qtcore/qpoint.html">QPoint</a>&amp;</td><td >[in, out] struct <a href="../qtcore/qpoint.html">QPoint</a> (user defined)</td></tr>
+</table></div>
+<p>enums and flags也可以被导出(参看Q_ENUMS()和Q_FLAGS()).作为参数传入的数据类型与作为返回值情况一致.</p>
+<p>任何以其他数据类型的属性,信号/槽都将被<a href="activeqt-index.html">ActiveQt</a>框架忽略.</p>
+<a name="sub-objects"></a>
+<h3 >子对象</h3>
+<p>COM对象有多个子对象,每个子对象代表一个COM对象的子元素. 当一个多文档扩展表应用程序作为一个COM对象时,这个应用程序可以为每一张扩展表提供一个子对象.</p>
+<p>任何<a href="../qtcore/qobject.html">QObject</a>子类都可以作为ActiveX子对象的类型而被使用,只要它在<a href="qaxfactory.html">QAxFactory</a>是已知的.然后这个类型就可以作为属性或信号/槽的参数类型或者是返回值的数据类型.</p>
+<a name="property-notification"></a>
+<h3 >属性通知</h3>
+<p>采用了多继承,从<a href="qaxbindable.html">QAxBindable</a>类钟继成,以使得属性能够被客户端绑定:</p>
+<pre class="cpp">
+
+  <span class="preprocessor">#include &lt;QAxBindable&gt;</span>
+  <span class="preprocessor">#include &lt;QWidget&gt;</span>
+
+  <span class="keyword">class</span> MyActiveX : <span class="keyword">public</span> <span class="type">QWidget</span><span class="operator">,</span> <span class="keyword">public</span> <span class="type">QAxBindable</span>
+  {
+      Q_OBJECT
+
+</pre>
+<p>在实现属性写入函数时,要使用<a href="qaxbindable.html">QAxBindable</a>类的requestPropertyChange()和 propertyChanged()函数来允许ActiveX客户端可以绑定控件属性.</p>
+<!-- <p>This is not required, but gives the client more control over the ActiveX control.</p>
+--><a name="serving-controls"></a>
+<h2 id="serving-controls">服务控制</h2>
+<p>为了使COM服务器能够适用COM系统,它必须适用五个字段的唯一标识符在COM系统中注册.这些标识符由<code>guidgen</code>或者<code>uuidgen</code>生成提供.注册信息允许将导出控件的远程过程调用的控件和读取到的控件导出的属性和方法的类型信息排序本地化为二进制文件提供给发出请求的ActiveX控件.</p>
+<p>当客户端请求创建一个COM对象时服务器必须导出一个<a href="qaxfactory.html">QAxFactory</a>的实现.使用以下的宏可以轻易实现:</p>
+<pre class="cpp">
+
+  QAXFACTORY_BEGIN(<span class="string">&quot;{ad90301a-849e-4e8b-9a91-0a6dc5f6461f}&quot;</span><span class="operator">,</span>
+                   <span class="string">&quot;{a8f21901-7ff7-4f6a-b939-789620c03d83}&quot;</span>)
+      QAXCLASS(MyWidget)
+      QAXCLASS(MyWidget2)
+      QAXTYPE(MySubType)
+  QAXFACTORY_END()
+
+</pre>
+<p><code>MyWidget</code>和<code>MyWidget2</code>将作为COM对象导出,可以在客户端上被创建,并注册为<code>MySubType</code>类型在<code>MyWidget</code>和<code>MyWidget2</code>的属性和参数中使用.</p>
+<p><a href="qaxfactory.html">QAxFactory类文档</a>解释了如何使用和实现这个宏以及在第三方factory上的使用.</p>
+<p>对于跨进程的可执行服务器可以实现一个main()函数,在main()函数中实例化一个<a href="../qtwidgets/qapplication.html">QApplication</a>对象,然后进入事件循环,就像一个平常的Qt应用程序一样.在默认情况下应用程序会被作为一个标准的Q他应用程序被启动,但如果在命令行中传递了<code>-activex</code> 参数将会作为一个ActiveX服务器而被启动.使用<a href="qaxfactory.html#isServer">QAxFactory::isServer</a>()判断来创建和运行一个标准应用程序界面否则就退出:</p>
+<pre class="cpp">
+
+  <span class="preprocessor">#include &lt;QApplication&gt;</span>
+  <span class="preprocessor">#include &lt;QAxFactory&gt;</span>
+
+  <span class="type">int</span> main(<span class="type">int</span> argc<span class="operator">,</span> <span class="type">char</span> <span class="operator">*</span>argv<span class="operator">[</span><span class="operator">]</span>)
+  {
+      <span class="type">QApplication</span> app(argc<span class="operator">,</span> argv);
+      <span class="keyword">if</span> (<span class="operator">!</span><span class="type">QAxFactory</span><span class="operator">::</span>isServer()) {
+          <span class="comment">// create and show main window</span>
+      }
+      <span class="keyword">return</span> app<span class="operator">.</span>exec();
+  }
+
+</pre>
+<p><a href="activeqt-index.html">ActiveQt</a>提供了提供了一个main函数的默认实现. 默认实现中调用<a href="qaxfactory.html#startServer">QAxFactory::startServer</a>(),创建一个<a href="../qtwidgets/qapplication.html">QApplication</a>实例然后调用exec().</p>
+<p>构建ActiveX服务器可执行性程序先运行<code>qmake</code>生成makefile,然后像其他Qt应用程序一样使用与编译器匹配的make工具.make程序需要在命令行中带上<code>-regserver</code>选项向系统注册表注册控件,最终生成可执行文件.</p>
+<p>如果ActiveX服务器时一个可执行程序一下则会支持以下的命令行选项:</p>
+<div class="table"><table class="generic">
+ <thead><tr class="qt-style"><th >选项</th><th >结果</th></tr></thead>
+<tr valign="top" class="odd"><td ><code>-regserver</code></td><td >把服务器注册到系统注册表</td></tr>
+<tr valign="top" class="even"><td ><code>-unregserver</code></td><td >将服务器从系统注册表中去除</td></tr>
+<tr valign="top" class="odd"><td ><code>-activex</code></td><td >将应用程序作为一个ActiveX服务器启动</td></tr>
+<tr valign="top" class="even"><td ><code>-dumpidl &lt;file&gt; -version x.y</code></td><td >将服务器的IDL写入到特定文件. 类型库的版本会被设置为x.y</td></tr>
+</table></div>
+<p>在所有的Windows系统中,进程内服务器可以使用<code>regsvr32</code>工具注册.</p>
+<a name="typical-compile-time-problems"></a>
+<h3 >典型的编译时问题</h3>
+<p>以下列出的编译或连接错误是基于Microsoft Visual C++ 6.0编译器发布的错误.</p>
+<a name="no-overloaded-function-takes-2-parameters"></a>
+<h4 >&quot;No overloaded function takes 2 parameters&quot;</h4>
+<p>当错误发生在代码使用的<a href="qaxfactory.html#QAXFACTORY_DEFAULT">QAXFACTORY_DEFAULT</a>()宏时,而widget类没有构造函数供默认的factory使用.添加一个标准的widget构造函数或者实现一个不需要widget类有构造函数的自定义factory都是可行的.</p>
+<p>当错误位置发生在使用的<a href="qaxfactory.html#QAXFACTORY_EXPORT">QAXFACTORY_EXPORT</a>()宏时,是因为<a href="qaxfactory.html">QAxFactory</a>子类没有合适的构造函数.可以为factory类提供一个如下的公有类构造函数</p>
+<pre class="cpp">
+
+  MyFactory(<span class="keyword">const</span> <span class="type">QUuid</span> <span class="operator">&amp;</span><span class="operator">,</span> <span class="keyword">const</span> <span class="type">QUuid</span> <span class="operator">&amp;</span>);
+
+</pre>
+<a name="syntax-error-bad-suffix-on-number"></a>
+<h4 >&quot;Syntax error: bad suffix on number&quot;</h4>
+<p>唯一标识符没有作为字符串传入宏<a href="qaxfactory.html#QAXFACTORY_EXPORT">QAXFACTORY_EXPORT</a>()或<a href="qaxfactory.html#QAXFACTORY_DEFAULT">QAXFACTORY_DEFAULT</a>().</p>
+<a name="unresolved-external-symbol-ucm-instantiate"></a>
+<h4 >&quot;Unresolved external symbol _ucm_instantiate&quot;</h4>
+<p>服务器不能导出<a href="qaxfactory.html">QAxFactory</a>的实现.在项目的实现文件中的其中一个使用<a href="qaxfactory.html#QAXFACTORY_EXPORT">QAXFACTORY_EXPORT</a>()宏去实例化和导出factory,或者使用<a href="qaxfactory.html#QAXFACTORY_DEFAULT">QAXFACTORY_DEFAULT</a>()宏来使用一个默认的factory.</p>
+<a name="ucm-initialize-already-defined-in"></a>
+<h4 >&quot;_ucm_initialize already defined in ..&#x2e;&quot;</h4>
+<p>服务器导出来不止一个<a href="qaxfactory.html">QAxFactory</a>的实现,或者导出一个相同的实现两次.如果使用了默认factory,<a href="qaxfactory.html#QAXFACTORY_DEFAULT">QAXFACTORY_DEFAULT</a>()宏项目文件中只能被使用一次.使如果服务器提供多个ActiveX控件那么请使用一个自定义的<a href="qaxfactory.html">QAxFactory</a>实现和宏<a href="qaxfactory.html#QAXFACTORY_EXPORT">QAXFACTORY_EXPORT</a>()</p>
+<a name="distributing-qaxserver-binaries"></a>
+<h3 >分发QAxServer的二进制文件</h3>
+<p>用Qt写的ActiveX服务器可以使用Qt作为共享库,也可以将他静态链接到二进制文件中.两种方法都将产生一个相当大的包(要么是服务器的二进制文件包本身变得很大,要么就是必须发送Qt DLL).</p>
+<a name="installing-stand-alone-servers"></a>
+<h4 >安装一个独立运行的服务器</h4>
+<p>当ActiveX服务器也可以作为一个独立运行的应用程序时,在目标系统安装上可执行文件后,需要在命令行中带上<code>-regserver</code>参数,使作为服务器运行.然后服务器提供的控件就可以用于ActiveX客户端.</p>
+<a name="installing-in-process-servers"></a>
+<h4 >安装程序内服务器</h4>
+<p>当ActiveX服务器是安装包的一部分时,使用Microsoft提供的<code>regsvr32</code>工具在目标系统中注册控件.如果这个工具不存在可以加载这个DLL到安装程序中,解析<code>DllRegisterServer</code>符号并调用函数:</p>
+<pre class="cpp">
+
+  HMODULE dll <span class="operator">=</span> LoadLibrary(<span class="string">&quot;myserver.dll&quot;</span>);
+  <span class="keyword">typedef</span> HRESULT(__stdcall <span class="operator">*</span>DllRegisterServerProc)();
+  DllRegisterServerProc DllRegisterServer <span class="operator">=</span>
+      (DllRegisterServerProc)GetProcAddress(dll<span class="operator">,</span> <span class="string">&quot;DllRegisterServer&quot;</span>);
+
+  HRESULT res <span class="operator">=</span> E_FAIL;
+  <span class="keyword">if</span> (DllRegisterServer)
+      res <span class="operator">=</span> DllRegisterServer();
+  <span class="keyword">if</span> (res <span class="operator">!</span><span class="operator">=</span> S_OK)
+      <span class="comment">// error handling</span>
+
+</pre>
+<a name="distributing-servers-over-the-internet"></a>
+<h4 >在互谅网上分发服务器</h4>
+<p>如果想在网页上使用服务器中的控件,需要使服务器可用于该浏览器的网页浏览,并且需要在网页中指定服务器包的位置.</p>
+<p>要指定服务器位置需要使用网站OBJECT的CODEBASE属性.属性值可以指向服务器文件本身,或指向一个INF文件(INF会列出服务器需要的其他文件例如Qt DLL),或者指向一个压缩了的CAB归档文件.</p>
+<p>INF和CAB文件几乎每一个都会被记录:</p>
+<pre class="cpp">
+
+  [version]
+      signature=&quot;$CHICAGO$&quot;
+      AdvancedINF=2.0
+   [Add.Code]
+      simpleax.exe=simpleax.exe
+   [simpleax.exe]
+      file-win32-x86=thiscab
+      clsid={DF16845C-92CD-4AAB-A982-EB9840E74669}
+      RegisterServer=yes
+
+</pre>
+<p>来自Microsoft的CABARC可以轻易的生成一个CAB归档文件:</p>
+<pre class="cpp">
+
+  cabarc N simpleax<span class="operator">.</span>cab simpleax<span class="operator">.</span>exe simple<span class="operator">.</span>inf
+
+</pre>
+<p>INF文件是假定静态构建的,所以所使用的的其他DLL依赖关系没有列出.要为依赖DLL的ActiveX服务器做分发,必须添加依赖项并向库文件提供归档文件.</p>
+<a name="using-the-controls"></a>
+<h2 id="using-the-controls">控件使用</h2>
+<p>ActiveX控件使用,比如将它们嵌入网页需要使用<code>&lt;object&gt;</code> HTML标签.</p>
+<pre class="cpp">
+
+  <span class="operator">&lt;</span>object ID<span class="operator">=</span><span class="string">&quot;MyActiveX1&quot;</span> CLASSID<span class="operator">=</span><span class="string">&quot;CLSID:ad90301a-849e-4e8b-9a91-0a6dc5f6461f&quot;</span><span class="operator">&gt;</span>
+     <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+  <span class="operator">&lt;</span>\object<span class="operator">&gt;</span>
+
+</pre>
+<p>初始化控件属性,可以这样:</p>
+<pre class="cpp">
+
+  <span class="operator">&lt;</span>object ID<span class="operator">=</span><span class="operator">.</span><span class="operator">.</span><span class="operator">.</span><span class="operator">&gt;</span>
+      <span class="operator">&lt;</span>param name<span class="operator">=</span><span class="string">&quot;name&quot;</span> value<span class="operator">=</span><span class="string">&quot;value&quot;</span><span class="operator">&gt;</span>
+  <span class="operator">&lt;</span>\object<span class="operator">&gt;</span>
+
+</pre>
+<p>如果浏览器支持脚本使用,ActiveX还支持使用JavaScript, VBScript和表单来编写控件.<a href="../qtdoc/examples-activeqt.html">ActiveQt示例</a>包含了在网页中使用示例控件.</p>
+<a name="supported-and-unsupported-activex-clients"></a>
+<h3 >支持和不支持的ActiveX客户端</h3>
+<p>下面是基于我们自己的ActiveX控件和客户端应用程序的经验,并不是完全的.</p>
+<a name="supported-clients"></a>
+<h4 >支持的客户端</h4>
+<p>这些应用程序使用的ActiveX控件都使用<a href="activeqt-index.html">ActiveQt</a>开发.但值得注意的是一些客户端只支持进程内控件</p>
+<ul>
+<li>Internet Explorer</li>
+<li>Microsoft ActiveX Control Test Container</li>
+<li>Microsoft Visual Studio 6.0</li>
+<li>Microsoft Visual Studio.NET/2003</li>
+<li>Microsoft Visual Basic 6.0</li>
+<li>MFC- and ATL-based containers</li>
+<li>Sybase PowerBuilder</li>
+<li><a href="activeqt-index.html">ActiveQt</a> based containers</li>
+</ul>
+<p>Microsoft Office应用程序是支持的但需要将控件注册为&quot;Insertable&quot;对象.要将重新实现的<a href="qaxfactory.html#registerClass">QAxFactory::registerClass</a>属性添加到一个COM对象，或者将类的&quot;Insertable&quot;信息设置为&quot;yes&quot;可以使用<a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>宏.</p>
+<a name="unsupported-clients"></a>
+<h4 >不支持的客户端</h4>
+<p>基于<a href="activeqt-index.html">ActiveQt</a>的COM对象还不能在以下的客户端程序运行.</p>
+<ul>
+<li>Borland C++ Builder (Versions 5 and 6)</li>
+<li>Borland Delphi</li>
+</ul>
+<a name="typical-runtime-errors"></a>
+<h3 >典型的运行时错误</h3>
+<a name="the-server-does-not-respond"></a>
+<h4 >The Server Does Not Respond</h4>
+<p>如果系统不能启动服务器(请在任务管理器中先检查是否已经启动服务器程序),确保服务器所依赖的DLL都在在系统路径中(比如Qt平台的DLL!).可以使用dependency walker查看服务器二进制文件所需要的依赖.</p>
+<p>如果服务器已经运行(即在任务管理器的任务列表中存在), 在调试时可以参看下面的信息。</p>
+<a name="the-object-cannot-be-created"></a>
+<h4 >The Object Cannot Be Created</h4>
+<p>如果服务器可以在构建过程中被创构建和正确的注册, 但是对象不能被初始化。例如：可以使用OLE/COM Object Viewer程序,以确保所有的服务器依赖没有从系统路径中丢失(比如Qt平台的DLL).也可以使用dependency walker查看服务器的依赖。</p>
+<p>如果服务器已经启动,调试服务器时可以查看下面的信息</p>
+<a name="debugging-runtime-errors"></a>
+<h3 >调试运行时错误</h3>
+<p>在Visual Studio中调试进程内服务器时,先将服务器项目设置为活动项目,然后在项目设置中指定一个客户端程序为&quot;executable for debug session(调试会话的可执行文件)&quot;如果安装的是debug版本的话,可以在代码中设置断点步入<a href="activeqt-index.html">ActiveQt</a>和Qt的代码中调试.</p>
+<p>要调试一个服务器可执行文件,先在调试器中使用命令行带<code>-activex</code>参数启动.然后启动客户端程序创建一个由服务器提供的ActiveX控件实例.COM会使用当前这个程序为下一个客户端创建一个ActiveX控件(这段话可能有误,如知情请告知).</p>
+<a name="class-information-and-tuning"></a>
+<h2 id="class-information-and-tuning">类信息与更新</h2>
+<p><a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>宏是元对象系统的一部分,用来为每一个COM类提供属性.</p>
+<div class="table"><table class="generic">
+ <thead><tr class="qt-style"><th >Key</th><th >value的意义</th></tr></thead>
+<tr valign="top" class="odd"><td >Version</td>
+<td >类的版本(1.0是默认版本值)</td></tr>
+<tr valign="top" class="even"><td >Description</td><td >描述类的一段字符串.</td></tr>
+<tr valign="top" class="odd"><td >ClassID</td><td >类的ID.在没有指定<a href="qaxfactory.html#classID">QAxFactory::classID</a>时必须重新实现.</td></tr>
+<tr valign="top" class="even"><td >InterfaceID</td><td >接口ID.在没有指定时<a href="qaxfactory.html#interfaceID">QAxFactory::interfaceID</a>必须重新实现.</td></tr>
+<tr valign="top" class="odd"><td >EventsID</td><td >事件接口ID.没有指定时将不会有信号作为COM事件被导出.</td></tr>
+<tr valign="top" class="even"><td >DefaultProperty</td>
+<td >这个被设置代表类的属性被指定为默认属性.例如一个push按钮这样设置时,它的property会是会是push按钮的默认属性&quot;text&quot;.</td></tr>
+<tr valign="top" class="odd"><td >DefaultSignal</td>
+<td >这个值被设置代表类被设置为默认信号,例如按钮这样被设置时,它的信号是的默认信号&quot;clicked&quot;.</td></tr>
+<tr valign="top" class="even"><td >LicenseKey</td>
+<td >对象创建需要指定许可秘钥. 被许可的机子秘钥可以为空.默认的类并没有筋骨过许可.也可以在一下部分查看相关</td></tr>
+<tr valign="top" class="odd"><td >StockEvents</td><td >如果这个值为&quot;yes&quot;那么对象的stock事件可以被导出.具体参看<a href="qaxfactory.html#hasStockEvents">QAxFactory::hasStockEvents</a>()</td></tr>
+<tr valign="top" class="even"><td >ToSuperClass</td><td >作为超类的对象的所有函数都可以被导出,包括类名,具体参看<a href="qaxfactory.html#exposeToSuperClass">QAxFactory::exposeToSuperClass</a>()</td></tr>
+<tr valign="top" class="odd"><td >Insertable</td><td >如果它的值为&quot;yes&quot;,类会被注册为&quot;Insertable&quot;并在OLE 2容器中列出(例如Microsoft Office).默认情况下不会被设置.</td></tr>
+<tr valign="top" class="even"><td >Aggregatable</td><td >如果它的值为&quot;no&quot;该类就不支持聚合.默认情况下是&quot;yes&quot;。</td></tr>
+<tr valign="top" class="odd"><td >Creatable</td><td >如果它的值是&quot;no&quot;该类就不能被客户端创建,并只能通过其他类(例如它的子类)的API来使用.</td></tr>
+<tr valign="top" class="even"><td >RegisterObject</td><td >如果它的值是&quot;yes&quot;,那么这个类的对象会在OLE中注册并可以通过运行对象表(ROT)来访问(例如:已运行的这样的类的实例可以被客户端连接).这个属性只在跨进程服务器中使用.</td></tr>
+<tr valign="top" class="odd"><td >MIME</td><td >可以在值中指定对象可以处理的数据和文件格式.值的格式为mime:extension:description.多种格式使用分号隔开</td></tr>
+<tr valign="top" class="even"><td >CoClassAlias</td>
+<td >在生成的IDL和注册表中使用.对于namespace中的类十分有用-默认情况下<a href="activeqt-index.html">ActiveQt</a>只是移除了&quot;::&quot;符号来让IDL编译.</td></tr>
+<tr valign="top" class="odd"><td >Implemented Categories</td><td >逗号分隔开的类别ID(CATID)或UUID列表.用来指定&quot;control&quot;, &quot;insertable&quot;之外的额外的容器功能的通用机制. 典型的CATIDs包括<code>CATID_InternetAware</code> (&quot;{0DE86A58-2BAA-11CF-A229-00AA003D7352}&quot;), <code>CATID_SafeForScripting</code> (&quot;{7DD95801-9882-11CF-9FA9-00AA006C42C4}&quot;)都可以作为用户定义的CATID的值.</td></tr>
+</table></div>
+<p>需要注意的是所有的key和value都是大小写敏感的.</p>
+<p>以下声明了一个2.0版本的的类,只允许它自身的API被导出并且可以在Microsoft Office程序中的&quot;Insert Objects&quot;对话框中找到.</p>
+<pre class="cpp">
+
+  <span class="keyword">class</span> MyActiveX : <span class="keyword">public</span> <span class="type">QWidget</span>
+  {
+      Q_OBJECT
+      Q_CLASSINFO(<span class="string">&quot;Version&quot;</span><span class="operator">,</span> <span class="string">&quot;2.0&quot;</span>)
+      Q_CLASSINFO(<span class="string">&quot;ClassID&quot;</span><span class="operator">,</span> <span class="string">&quot;{7a4cffd8-cbcd-4ae9-ae7e-343e1e5710df}&quot;</span>)
+      Q_CLASSINFO(<span class="string">&quot;InterfaceID&quot;</span><span class="operator">,</span> <span class="string">&quot;{6fb035bf-8019-48d8-be51-ef05427d8994}&quot;</span>)
+      Q_CLASSINFO(<span class="string">&quot;EventsID&quot;</span><span class="operator">,</span> <span class="string">&quot;{c42fffdf-6557-47c9-817a-2da2228bc29c}&quot;</span>)
+      Q_CLASSINFO(<span class="string">&quot;Insertable&quot;</span><span class="operator">,</span> <span class="string">&quot;yes&quot;</span>)
+      Q_CLASSINFO(<span class="string">&quot;ToSuperClass&quot;</span><span class="operator">,</span> <span class="string">&quot;MyActiveX&quot;</span>)
+      Q_PROPERTY(<span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>)
+
+  <span class="keyword">public</span>:
+      MyActiveX(<span class="type">QWidget</span> <span class="operator">*</span>parent <span class="operator">=</span> <span class="number">0</span>);
+
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+  };
+
+</pre>
+<a name="developing-licensed-components"></a>
+<h3 >开发受许可组件</h3>
+<p>由于服务器二进制可以被发送到任何的客户机上,所有人都可以在它的软件中使用这些组件.所以被开发出的组件的使用可能需要受到开发者控制.</p>
+<p>组件许可可以通过一些列技术实现,例如需要提供许可秘钥才能够在代码中创建,或者运行控件的机子需要获得许可.</p>
+<p>可以使用<a href="../qtcore/qobject.html#Q_CLASSINFO">Q_CLASSINFO</a>()宏为Qt类标记以指定&quot;LicenseKey&quot;.</p>
+<pre class="cpp">
+
+  <span class="keyword">class</span> MyLicensedControl : <span class="keyword">public</span> <span class="type">QWidget</span>
+  {
+      Q_OBJECT
+      Q_CLASSINFO(<span class="string">&quot;LicenseKey&quot;</span><span class="operator">,</span> <span class="string">&quot;&lt;key string&gt;&quot;</span>)
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+  };
+
+</pre>
+<p>关键在于在一台未经许可的机子上创建一个<code>MyLicensedControl</code>实例.这时被许可的开发者需要在它的应用程序中重新分发服务器二进制并在创建控件时使用&quot;LicenseKey&quot;值,而使用者的应用程序没有许可秘钥时控件则不能被创建.</p>
+<p>如果一个单独的许可秘钥多余控件来说还不够的话(比如想让不同的开发者接收不同的许可秘钥)可以创建一个空钥匙来指示控件需要的许可秘钥,并重新实现<a href="qaxfactory.html#validateLicenseKey">QAxFactory::validateLicenseKey</a>()来验证系统中的许可秘钥(通过使用一个秘钥文件).</p>
+<a name="more-interfaces"></a>
+<h3 >更多接口</h3>
+<p><a href="activeqt-index.html">ActiveQt</a>服务器提供的ActiveX控件时OLE规范下的一组最小的COM接口实现.当ActiveX类继承<a href="qaxbindable.html">QAxBindable</a>类后,它可以实现额外的COM接口.</p>
+<p>下面演示了一个继承自<a href="qaxaggregated.html">QAxAggregated</a>的子类,通过使用使用多继承来实现额外的COM接口.</p>
+<pre class="cpp">
+
+  <span class="keyword">class</span> AxImpl : <span class="keyword">public</span> <span class="type">QAxAggregated</span><span class="operator">,</span> <span class="keyword">public</span> ISomeCOMInterface
+  {
+  <span class="keyword">public</span>:
+      AxImpl() {}
+
+      <span class="type">long</span> queryInterface(<span class="keyword">const</span> <span class="type">QUuid</span> <span class="operator">&amp;</span>iid<span class="operator">,</span> <span class="type">void</span> <span class="operator">*</span><span class="operator">*</span>iface);
+
+      <span class="comment">// IUnknown</span>
+      QAXAGG_IUNKNOWN
+
+      <span class="comment">// ISomeCOMInterface</span>
+      <span class="operator">.</span><span class="operator">.</span><span class="operator">.</span>
+  }
+
+</pre>
+<p>可以重新实现<a href="qaxaggregated.html#queryInterface">QAxAggregated::queryInterface</a>()函数来支持额外的COM接口.</p>
+<pre class="cpp">
+
+  <span class="type">long</span> AxImpl<span class="operator">::</span>queryInterface(<span class="keyword">const</span> <span class="type">QUuid</span> <span class="operator">&amp;</span>iid<span class="operator">,</span> <span class="type">void</span> <span class="operator">*</span><span class="operator">*</span>iface)
+  {
+      <span class="operator">*</span>iface <span class="operator">=</span> <span class="number">0</span>;
+      <span class="keyword">if</span> (iid <span class="operator">=</span><span class="operator">=</span> IID_ISomeCOMInterface)
+          <span class="operator">*</span>iface <span class="operator">=</span> (ISomeCOMInterface <span class="operator">*</span>)<span class="keyword">this</span>;
+      <span class="keyword">else</span>
+          <span class="keyword">return</span> E_NOINTERFACE;
+
+      AddRef();
+      <span class="keyword">return</span> S_OK;
+  }
+
+</pre>
+<p>由于<code>ISomeCOMInterface</code>是一个<code>IUnknown</code>的子类,所以必须实现<code>QueryInterface()</code>, <code>AddRef()</code>,和<code>Release()</code>函数.这些可以在类定义时使用QAXAGG_IUNKNOWN宏来做.<code>IUnknown</code>函数的手动实现原理就是委托调用的接口指针被<a href="qaxaggregated.html#controllingUnknown">QAxAggregated::controllingUnknown</a>()函数返回,代码如下;</p>
+<pre class="cpp">
+
+  HRESULT AxImpl<span class="operator">::</span>QueryInterface(REFIID iid<span class="operator">,</span> <span class="type">void</span> <span class="operator">*</span><span class="operator">*</span>iface)
+  {
+      <span class="keyword">return</span> controllingUnknown()<span class="operator">-</span><span class="operator">&gt;</span>QueryInterface(iid<span class="operator">,</span> iface);
+  }
+
+</pre>
+<p>不支持<code>IUnknown</code>接口在<a href="qaxaggregated.html#queryInterface">queryInterface()</a>中实现.</p>
+<p>如果想要实现控件可以调用<a href="../qtcore/qobject.html">QObject</a>子类需要使用<a href="qaxaggregated.html#object">QAxAggregated::object</a>()</p>
+<p>在<a href="qaxbindable.html">QAxBindable</a>子类中实现的<a href="qaxbindable.html#createAggregate">QAxBindable::createAggregate</a>()函数会返回一个新的<a href="qaxaggregated.html">QAxAggregated</a>子类对象.</p>
+<pre class="cpp">
+
+  <span class="keyword">class</span> MyActiveX : <span class="keyword">public</span> <span class="type">QWidget</span><span class="operator">,</span> <span class="keyword">public</span> <span class="type">QAxBindable</span>
+  {
+      Q_OBJECT
+
+  <span class="keyword">public</span>:
+      MyActiveX(<span class="type">QWidget</span> <span class="operator">*</span>parent);
+
+      <span class="type">QAxAggregated</span> <span class="operator">*</span>createAggregate()
+      {
+          <span class="keyword">return</span> <span class="keyword">new</span> AxImpl();
+      }
+  };
+
+</pre>
+</div>
+<p><b>也可参看</b><a href="activeqt-index.html">ActiveQt Framework</a>.</p>
+<!-- @@@activeqt-server.html -->
+        </div>
+       </div>
+   </div>
+   </div>
+</div>
+<div class="footer">
+   <p>
+   <acronym title="Copyright">&copy;</acronym> 2017 The Qt Company Ltd.
+   Documentation contributions included herein are the copyrights of
+   their respective owners.<br>    The documentation provided herein is licensed under the terms of the    <a href="http://www.gnu.org/licenses/fdl.html">GNU Free Documentation    License version 1.3</a> as published by the Free Software Foundation.<br>    Qt and respective logos are trademarks of The Qt Company Ltd.     in Finland and/or other countries worldwide. All other trademarks are property
+   of their respective owners. </p>
+</div>
+</body>
+</html>
