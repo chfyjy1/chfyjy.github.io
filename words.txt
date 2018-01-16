@@ -36,3 +36,11 @@ resolve 解析
 symbol 符号
 license 许可
 functionality 功能 函数
+aggregation 组合
+semicolon 分号
+capabilities 功能
+generic 通用的
+mechanism 机制
+mark 标记
+sufficient 足够的
+copyright 版权
